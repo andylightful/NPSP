@@ -2,6 +2,7 @@
 
 Resource        robot/Cumulus/resources/NPSP.robot
 Library         cumulusci.robotframework.PageObjects
+...             robot/Cumulus/resources/NPSP.py
 ...             robot/Cumulus/resources/TriggerHandlerPageObject.py
 ...             robot/Cumulus/resources/ContactPageObject.py
 ...             robot/Cumulus/resources/RecurringDonationsPageObject.py
