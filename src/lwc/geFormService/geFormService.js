@@ -10,6 +10,18 @@ import getFormRenderWrapper
     from '@salesforce/apex/GE_FormServiceController.getFormRenderWrapper';
 import OPPORTUNITY_AMOUNT from '@salesforce/schema/Opportunity.Amount';
 import OPPORTUNITY_OBJECT from '@salesforce/schema/Opportunity';
+import DI_PAYMENT_STATUS_FIELD from '@salesforce/schema/DataImport__c.Payment_Status__c';
+import DI_PAYMENT_DECLINED_REASON_FIELD from '@salesforce/schema/DataImport__c.Payment_Declined_Reason__c';
+
+import insertDataImport from '@salesforce/apex/GE_GiftEntryController.insertDataImport';
+import makePurchaseCall from '@salesforce/apex/GE_GiftEntryController.makePurchaseCall';
+
+// TODO: Remove placeholder tokenize call later
+import makeTokenizeCall from '@salesforce/apex/GE_GiftEntryController.makeTokenizeCall';
+import { SingleSaveResult } from './singleSaveResult';
+
+const PAYMENT_STATUS__C = DI_PAYMENT_STATUS_FIELD.fieldApiName;
+const PAYMENT_DECLINED_REASON__C = DI_PAYMENT_DECLINED_REASON_FIELD.fieldApiName;
 
 // https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_enum_Schema_DisplayType.htm
 // this list only includes fields that can be handled by lightning-input
@@ -144,42 +156,146 @@ class GeFormService {
     }
 
     /**
-     * Takes a Data Import record and additional object data, processes it, and returns the new Opportunity created from it.
-     * @param createdDIRecord
-     * @param widgetValues
-     * @returns {Promise<Id>}
-     */
-    saveAndProcessDataImport(createdDIRecord, widgetValues, hasUserSelectedDonation = false) {
-        const widgetDataString = JSON.stringify(widgetValues);
-        return new Promise((resolve, reject) => {
-            saveAndProcessDataImport({
-                    diRecord: createdDIRecord,
-                    widgetData: widgetDataString,
-                    updateGift: hasUserSelectedDonation
-                })
-                .then((result) => {
-                    resolve(result);
-                })
-                .catch(error => {
-                    console.error(JSON.stringify(error));
-                    reject(error);
-                });
-        });
-    }
-
-    /**
      * Takes a list of sections, reads the fields and values, creates a di record, and creates an opportunity from the di record
      * @param sectionList
      * @returns opportunityId
      */
-    handleSave(sectionList, record, dataImportRecord) {
-        const { diRecord, widgetValues } = this.getDataImportRecord(sectionList, record, dataImportRecord);
-
+    async handleSave(sectionList, record, dataImportRecord, dataImportRecordId) {
+        let { diRecord, widgetValues } = this.getDataImportRecord(sectionList, record, dataImportRecord);
         const hasUserSelectedDonation = isNotEmpty(dataImportRecord);
 
-        const opportunityID = this.saveAndProcessDataImport(diRecord, widgetValues, hasUserSelectedDonation);
+        const hasPaymentToProcess = await this.retrieveToken(diRecord);
+        const isPaymentProcessReattempt = hasPaymentToProcess && dataImportRecordId;
 
-        return opportunityID;
+        if (isPaymentProcessReattempt) {
+            diRecord.Id = dataImportRecordId;
+        }
+
+        const saveResponse = hasPaymentToProcess ?
+            await this.handlePaymentProcessing(diRecord, widgetValues, hasUserSelectedDonation) :
+            await this.handleSaveAndProcess(diRecord, widgetValues, hasUserSelectedDonation);
+
+        return saveResponse;
+    }
+
+    /*******************************************************************************
+    * @description Methods attempts to retrieve a token from the tokenize card widget
+    * (geFormWidgetTokenizeCard).
+    *
+    * @param {object} dataImportRecord: A DataImport__c record
+    *
+    * @return {boolean}: True if a token was retrieved from the tokenize card widget
+    */
+    retrieveToken = async (dataImportRecord) => {
+        // TODO: Temporary way of retrieving the token, replace with actual call later
+        // Query for the widget component?
+        dataImportRecord.token = await makeTokenizeCall();
+        return dataImportRecord.token ? true : false;
+    }
+
+    /*******************************************************************************
+    * @description Methods handles attempting to make a purchase call to Payment
+    * Services. Immediately attempts to the charge the card provided in the Payment
+    * Services iframe (GE_TokenizeCard).
+    *
+    * @param {object} dataImportRecord: A DataImport__c record
+    * @param {object} widgetValues: Data held in various form widgets
+    * @param {boolean} hasUserSelectedDonation: True if a user has selected a
+    *   donation/payment through the 'Review Donations' modal. It means that we're
+    *   attempting to match to a specific donation record during BDI processing.
+    *
+    * @return {object} saveResponse: Object will either contain data from successfully
+    *   processing a data import or data from a failed purchase call attempt.
+    */
+    handlePaymentProcessing = async (dataImportRecord, widgetValues, hasUserSelectedDonation) => {
+        const purchaseCallResponse = await this.handlePurchaseCall(dataImportRecord);
+        if (purchaseCallResponse) {
+            this.setPaymentStatusAndReason(dataImportRecord, purchaseCallResponse);
+
+            const isSuccessfulPurchase = purchaseCallResponse.statusCode === 201;
+            const saveResponse = isSuccessfulPurchase ?
+                await this.handleSaveAndProcess(dataImportRecord, widgetValues, hasUserSelectedDonation) :
+                await this.handleFailedPurchaseCall(dataImportRecord, widgetValues, purchaseCallResponse);
+
+            return saveResponse;
+        }
+    }
+
+    /*******************************************************************************
+    * @description Methods posts an http request through the `makePurchaseCall` apex
+    * method and parses the response.
+    *
+    * @param {object} dataImportRecord: A DataImport__c record
+    *
+    * @return {object} response: An http response object
+    */
+    handlePurchaseCall = async (dataImportRecord) => {
+        let purchaseCallResponseString = await makePurchaseCall({ dataImportRecord: dataImportRecord });
+        let response = JSON.parse(purchaseCallResponseString);
+        response.body = JSON.parse(response.body);
+
+        return response;
+    }
+
+    /*******************************************************************************
+    * @description Methods sets values Payment Services related Data Import fields.
+    * Payment_Status__c and Payment_Declined_Reason__c.
+    *
+    * @param {object} dataImportRecord: A DataImport__c record
+    * @param {object} purchaseResponse: An http response object
+    */
+    setPaymentStatusAndReason = (dataImportRecord, purchaseResponse) => {
+        const paymentStatus = purchaseResponse.body.status || purchaseResponse.status || 'Unknown';
+        dataImportRecord[PAYMENT_STATUS__C] = paymentStatus;
+
+        const isSuccessfulPurchase = purchaseResponse.statusCode === 201;
+        if (isSuccessfulPurchase) {
+            dataImportRecord[PAYMENT_DECLINED_REASON__C] = null;
+        } else {
+            dataImportRecord[PAYMENT_DECLINED_REASON__C] = JSON.stringify(purchaseResponse.body);
+        }
+    }
+
+    /*******************************************************************************
+    * @description Methods handles a failed purchase call. Inserts the DataImport__c
+    * record with the purchase call response info.
+    *
+    * @param {object} dataImportRecord: A DataImport__c record
+    * @param {object} widgetValues: Data held in various form widgets
+    * @param {object} purchaseResponse: An http response object
+    *
+    * @return {object} SingleSaveResult: Single save response object defined in
+    *   singeSaveResponse.js
+    */
+    handleFailedPurchaseCall = async (dataImportRecord, widgetValues, purchaseResponse) => {
+        const widgetJson = JSON.stringify(widgetValues);
+        const insertResponse =
+            await insertDataImport({ diRecord: dataImportRecord, widgetData: widgetJson });
+
+        return new SingleSaveResult(false, insertResponse.Id, purchaseResponse);
+    }
+
+    /*******************************************************************************
+    * @description Methods handles saving and processing a Data Import record.
+    *
+    * @param {object} dataImportRecord: A DataImport__c record
+    * @param {object} widgetValues: Data held in various form widgets
+    * @param {boolean} hasUserSelectedDonation: True if a user has selected a
+    *   donation/payment through the 'Review Donations' modal. It means that we're
+    *   attempting to match to a specific donation record during BDI processing.
+    *
+    * @return {object} SingleSaveResult: Single save response object defined in
+    *   singeSaveResponse.js
+    */
+    handleSaveAndProcess = async (dataImportRecord, widgetValues, hasUserSelectedDonation) => {
+        const widgetJson = JSON.stringify(widgetValues);
+        const opportunityId = await saveAndProcessDataImport({
+            diRecord: dataImportRecord,
+            widgetData: widgetJson,
+            updateGift: hasUserSelectedDonation
+        });
+
+        return new SingleSaveResult(true, opportunityId);
     }
 
     /**

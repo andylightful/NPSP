@@ -10,7 +10,8 @@ import {
     handleError,
     getRecordFieldNames,
     setRecordValuesOnTemplate,
-    checkPermissionErrors
+    checkPermissionErrors,
+    showToast
 } from 'c/utilTemplateBuilder';
 import { registerListener } from 'c/pubsubNoPageRef';
 import {
@@ -93,7 +94,7 @@ export default class GeFormRenderer extends NavigationMixin(LightningElement) {
     erroredFields = [];
     CUSTOM_LABELS = { ...GeLabelService.CUSTOM_LABELS, messageLoading };
 
-    @track dataImport; // Row being updated when in update mode
+    @track dataImport = {}; // Row being updated when in update mode
     @track widgetData = {}; // data that must be passed down to the allocations widget.
     @track isAccessible = true;
 
@@ -271,16 +272,43 @@ export default class GeFormRenderer extends NavigationMixin(LightningElement) {
         GeFormService.handleSave(
             sectionsList,
             this.donorRecord,
-            this.selectedDonationDataImportFieldValues)
-            .then(opportunityId => {
-                this.navigateToRecordPage(opportunityId);
+            this.selectedDonationDataImportFieldValues,
+            this.dataImport.Id)
+            .then(saveResult => {
+                this.handleSingleGiftSaveResult(saveResult);
             })
             .catch(error => {
+                handleCatchError(error);
+            })
+            .finally(() => {
                 enableSave();
                 toggle();
-                handleCatchError(error);
-            });
+            })
+    }
 
+    /*******************************************************************************
+    * @description Handles the response from the handleSave method in geFormService
+    * for a Single Gift Entry save. Navigates to the opportunity record detail page
+    * if saving and processing of the Data Import was successful. Otherwise sets
+    * the Data Import record id in gift entry and outputs an error.
+    *
+    * @param {object} singleSaveResult: Event holding error details
+    */
+    handleSingleGiftSaveResult(singleSaveResult) {
+        if (singleSaveResult.hasProcessedDataImport) {
+            this.navigateToRecordPage(singleSaveResult.recordId);
+        } else {
+            this.dataImport.Id = singleSaveResult.recordId;
+            const httpResponse = singleSaveResult.httpResponse;
+            // TODO: Temporary toast for purchase call errors, remove later
+            // Deliver the purchase call error to the end user somehow
+            let errors = httpResponse.body.errors.map(error => error.message);
+            showToast(
+                `Purchase Call Error: ${httpResponse.statusCode} ${httpResponse.status}`,
+                `${errors}`,
+                'error',
+                'sticky');
+        }
     }
 
     handleSaveBatchGiftEntry(sectionsList,enableSave,toggle) {

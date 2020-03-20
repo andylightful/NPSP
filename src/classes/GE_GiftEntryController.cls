@@ -46,16 +46,18 @@ public with sharing class GE_GiftEntryController {
     }
 
     @AuraEnabled
-    public static String makePurchaseCall(String token) {
-        GE_PaymentServices paymentServices = new GE_PaymentServices(token);
-        HttpResponse response = paymentServices.makePurchaseCall();
+    public static String makePurchaseCall(DataImport__c dataImportRecord) {
+        GE_PaymentServices paymentServices = new GE_PaymentServices(dataImportRecord);
+        GE_PaymentServices.ResponseWrapper response = paymentServices.makePurchaseCall();
 
-        // Parse the JSON response...
-        if (response.getStatusCode() != 201) {
-            return JSON.serialize(response.getStatus());
-        } else {
-            return JSON.serialize(response.getBody());
-        }
+        return JSON.serialize(response);
+    }
+
+    // TODO: Remove placeholder tokenize call later
+    @AuraEnabled
+    public static String makeTokenizeCall() {
+        GE_PaymentServices paymentServices = new GE_PaymentServices();
+        return paymentServices.placeholderTokenize();
     }
 
     /*******************************************************************************************************
@@ -130,6 +132,18 @@ public with sharing class GE_GiftEntryController {
         Id oppId = getOpportunityIdFromImport(diRecord.Id);
 
         return oppId;
+    }
+
+    @AuraEnabled
+    public static DataImport__c insertDataImport(DataImport__c diRecord, String widgetData) {
+        // Check for widget data and convert it to the correct format for processing
+        String additionalObjectJSON = GE_FormRendererService.convertWidgetDataToObjectJSON(widgetData);
+        diRecord.Additional_Object_JSON__c = additionalObjectJSON;
+
+        // Save the Data Import record to the Database
+        diRecord = saveDataImport(diRecord);
+
+        return diRecord;
     }
 
     /*******************************************************************************************************
