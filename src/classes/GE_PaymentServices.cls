@@ -36,47 +36,16 @@
 */
 public with sharing class GE_PaymentServices {
 
-    String paymentMethodToken = null;
     DataImport__c dataImportRecord;
 
     public GE_PaymentServices() {}
 
+    // TODO: Update later to remove placeholder token input. Currently used to support tests.
     public GE_PaymentServices(DataImport__c dataImportRecord) {
-        //this.paymentMethodToken = token;
-        this.paymentMethodToken = placeholderTokenize();
         this.dataImportRecord = dataImportRecord;
     }
 
-    // TODO: Remove placeholder tokenize endpoint later. Only used because SDK endpoint is down.
-    public String placeholderTokenize() {
-        // Create http request...
-        Http http = new Http();
-        HttpRequest request = new HttpRequest();
-        request.setEndpoint('https://x2t03i3rn5.execute-api.us-west-2.amazonaws.com/v1/payments/public/tokens');
-        request.setMethod('POST');
-        request.setHeader('Content-Type', 'application/json');
-        request.setHeader('productid', '1111');
-
-        // Set the body as a JSON object...
-        request.setBody('{"cardNumber": "4111111111111111","nameOnCard": "sean corgan","expMonth": "02","expYear": "2039","cvc": "123","gatewayType": "CONFIGURED"}');
-
-        HttpResponse response = http.send(request);
-
-        TokenizeResponse resp = (TokenizeResponse)JSON.deserialize(response.getBody(), TokenizeResponse.class);
-
-        return resp.token;
-    }
-
-    // TODO: Remove placeholder inner class
-    public class TokenizeResponse {
-        public String token;
-    }
-
     public ResponseWrapper makePurchaseCall() {
-        return makePurchaseCall(this.paymentMethodToken);
-    }
-
-    public ResponseWrapper makePurchaseCall(String token) {
         // Create http request...
         Http http = new Http();
         HttpRequest request = new HttpRequest();
@@ -88,8 +57,8 @@ public with sharing class GE_PaymentServices {
         request.setHeader('sfdo.username', getUsername());
 
         // Set the body as a JSON object...
-        PurchaseCallBody purchaseCallBody = new PurchaseCallBody(this);
-        request.setBody(purchaseCallBody.getAsJson());
+        String purchaseCallBodyString = new PurchaseCallBody(dataImportRecord).getAsJson();
+        request.setBody(purchaseCallBodyString);
 
         HttpResponse response = http.send(request);
         ResponseWrapper responseWrapper = new ResponseWrapper(response);
@@ -127,24 +96,47 @@ public with sharing class GE_PaymentServices {
         return 'cbaxter';
     }
 
+    public with sharing class Metadata {
+        public String campaignCode;
+    }
+
     public with sharing class PurchaseCallBody {
-        private GE_PaymentServices paymentServices;
-        private Decimal amount;
-        private String currencyCode;
-        private String paymentMethodToken;
-        private String merchantId;
-        private String gatewayId;
-        private String email;
-        private String firstName;
-        private String lastName;
-        private String metadata;
+        public Double amount;
+        public String currencyCode;
+        public String paymentMethodToken;
+        public String merchantId;
+        public String gatewayId;
+        public String email;
+        public String firstName;
+        public String lastName;
+        public Metadata metadata;
+
+        // TODO: Remove placeholder tokenize endpoint later. Only used because SDK endpoint is down.
+        public String placeholderTokenize() {
+            // Create http request...
+            Http http = new Http();
+            HttpRequest request = new HttpRequest();
+            request.setEndpoint('https://x2t03i3rn5.execute-api.us-west-2.amazonaws.com/v1/payments/public/tokens');
+            request.setMethod('POST');
+            request.setHeader('Content-Type', 'application/json');
+            request.setHeader('productid', '1111');
+
+            // Set the body as a JSON object...
+            request.setBody('{"cardNumber": "4111111111111111","nameOnCard": "sean corgan","expMonth": "02","expYear": "2039","cvc": "123","gatewayType": "CONFIGURED"}');
+
+            HttpResponse response = http.send(request);
+
+            GE_PaymentServices.TokenizeResponse resp = (GE_PaymentServices.TokenizeResponse)JSON.deserialize(response.getBody(), GE_PaymentServices.TokenizeResponse.class);
+
+            return resp.token;
+        }
 
         //
         // Methods for retrieving the request body
         //
 
-        private Decimal getAmount() {
-            return this.paymentServices.dataImportRecord.Donation_Amount__c;
+        private Double getAmount(DataImport__c dataImport) {
+            return dataImport.Donation_Amount__c;
         }
 
         private String getCurrencyCode() {
@@ -152,7 +144,7 @@ public with sharing class GE_PaymentServices {
         }
 
         private String getPaymentMethodToken() {
-            return paymentServices.paymentMethodToken;
+            return placeholderTokenize();
         }
 
         private String getMerchantId() {
@@ -170,20 +162,22 @@ public with sharing class GE_PaymentServices {
         }
 
         private String getFirstName() {
-            return 'Bart';
+            return '.';
         }
 
         private String getLastName() {
-            return 'Simpson';
+            return 'Some Organization Account';
         }
 
-        private String getMetadata() {
-            return '{ "campaignCode": "fake-campaign-code" }';
+        private Metadata getMetadata(DataImport__c dataImport) {
+            Metadata metadata = new Metadata();
+            metadata.campaignCode = dataImport.Donation_Campaign_Name__c;
+
+            return metadata;
         }
 
-        public PurchaseCallBody(GE_PaymentServices paymentServices) {
-            this.paymentServices = paymentServices;
-            this.amount = getAmount();
+        public PurchaseCallBody(DataImport__c dataImport) {
+            this.amount = getAmount(dataImport);
             this.currencyCode = getCurrencyCode();
             this.paymentMethodToken = getPaymentMethodToken();
             this.merchantId = getMerchantId();
@@ -191,37 +185,12 @@ public with sharing class GE_PaymentServices {
             this.email = getEmail();
             this.firstName = getFirstName();
             this.lastName = getLastName();
-            this.metadata = getMetadata();
+            this.metadata = getMetadata(dataImport);
         }
 
         public String getAsJson() {
-            String serializedPurchaseCallBody = JSON.serialize(this);
-            Map<String, Object> untypedPurchaseCallBody =
-                (Map<String, Object>) JSON.deserializeUntyped(serializedPurchaseCallBody);
-            untypedPurchaseCallBody.remove('paymentServices');
-
-            Integer numberOfProperties = untypedPurchaseCallBody.keySet().size();
-            Integer currentIndex = 0;
-            String json = '{';
-
-            for (String key : untypedPurchaseCallBody.keySet()) {
-                json += '"' + key + '": ';
-
-                if (key == 'amount' || key == 'metadata') {
-                    json += untypedPurchaseCallBody.get(key);
-                } else {
-                    json += '"' + untypedPurchaseCallBody.get(key) + '"';
-                }
-
-                currentIndex ++;
-
-                if (currentIndex != numberOfProperties) {
-                    json += ',';
-                }
-            }
-            json += '}';
-            System.debug('json: ' + json);
-            return json;
+            System.debug(JSON.serialize(this));
+            return JSON.serialize(this);
         }
     }
 
@@ -235,5 +204,16 @@ public with sharing class GE_PaymentServices {
             this.status = response.getStatus();
             this.body = response.getBody();
         }
+    }
+
+    public class FabricatedCardholderName {
+        public String firstName;
+        public String lastName;
+        public String accountName;
+    }
+
+    // TODO: Remove placeholder inner class
+    public class TokenizeResponse {
+        public String token;
     }
 }

@@ -164,7 +164,7 @@ class GeFormService {
         let { diRecord, widgetValues } = this.getDataImportRecord(sectionList, record, dataImportRecord);
         const hasUserSelectedDonation = isNotEmpty(dataImportRecord);
 
-        const hasPaymentToProcess = await this.retrieveToken(diRecord);
+        const hasPaymentToProcess = await this.checkForPaymentToken(diRecord);
         const isPaymentProcessReattempt = hasPaymentToProcess && dataImportRecordId;
 
         if (isPaymentProcessReattempt) {
@@ -179,22 +179,32 @@ class GeFormService {
     }
 
     /*******************************************************************************
-    * @description Methods attempts to retrieve a token from the tokenize card widget
-    * (geFormWidgetTokenizeCard).
+    * @description Method attempts to retrieve a token from the tokenize card widget
+    * (geFormWidgetTokenizeCard). If we have a token, then we can assume that we're
+    * in Single Gift Entry mode and puchase call needs to be made.
+    *
+    * Future Notes: We may need to add an additional check in here for when
+    * geFormWidgetTokenizeCard is disabled. If it is disabled, then we skip the
+    * purchase call.
     *
     * @param {object} dataImportRecord: A DataImport__c record
     *
     * @return {boolean}: True if a token was retrieved from the tokenize card widget
     */
-    retrieveToken = async (dataImportRecord) => {
-        // TODO: Temporary way of retrieving the token, replace with actual call later
-        // Query for the widget component?
+    checkForPaymentToken = async (dataImportRecord) => {
+        // TODO: Check if tokenize card widget is disabled, return false if disabled
+
+        // TODO: Replace below with token retrieval from widget
         dataImportRecord.token = await makeTokenizeCall();
+
+        // TODO: Handle tokenize error?
+
+        // TODO: Return true if tokenize card widget is enabled AND we have a token
         return dataImportRecord.token ? true : false;
     }
 
     /*******************************************************************************
-    * @description Methods handles attempting to make a purchase call to Payment
+    * @description Method attempts to make a purchase call to Payment
     * Services. Immediately attempts to the charge the card provided in the Payment
     * Services iframe (GE_TokenizeCard).
     *
@@ -208,7 +218,11 @@ class GeFormService {
     *   processing a data import or data from a failed purchase call attempt.
     */
     handlePaymentProcessing = async (dataImportRecord, widgetValues, hasUserSelectedDonation) => {
+        // TODO: If in batch mode, defer purchase call later
+        // TODO: Retrieve fabricated card name
+
         const purchaseCallResponse = await this.handlePurchaseCall(dataImportRecord);
+        console.log('Purchase Call Response: ', purchaseCallResponse);
         if (purchaseCallResponse) {
             this.setPaymentStatusAndReason(dataImportRecord, purchaseCallResponse);
 
@@ -222,7 +236,7 @@ class GeFormService {
     }
 
     /*******************************************************************************
-    * @description Methods posts an http request through the `makePurchaseCall` apex
+    * @description Method posts an http request through the `makePurchaseCall` apex
     * method and parses the response.
     *
     * @param {object} dataImportRecord: A DataImport__c record
@@ -238,7 +252,7 @@ class GeFormService {
     }
 
     /*******************************************************************************
-    * @description Methods sets values Payment Services related Data Import fields.
+    * @description Method sets values Payment Services related Data Import fields.
     * Payment_Status__c and Payment_Declined_Reason__c.
     *
     * @param {object} dataImportRecord: A DataImport__c record
@@ -257,7 +271,7 @@ class GeFormService {
     }
 
     /*******************************************************************************
-    * @description Methods handles a failed purchase call. Inserts the DataImport__c
+    * @description Method handles a failed purchase call. Inserts the DataImport__c
     * record with the purchase call response info.
     *
     * @param {object} dataImportRecord: A DataImport__c record
@@ -276,7 +290,7 @@ class GeFormService {
     }
 
     /*******************************************************************************
-    * @description Methods handles saving and processing a Data Import record.
+    * @description Method handles saving and processing a Data Import record.
     *
     * @param {object} dataImportRecord: A DataImport__c record
     * @param {object} widgetValues: Data held in various form widgets

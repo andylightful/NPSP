@@ -57,7 +57,7 @@ public with sharing class GE_GiftEntryController {
     @AuraEnabled
     public static String makeTokenizeCall() {
         GE_PaymentServices paymentServices = new GE_PaymentServices();
-        return paymentServices.placeholderTokenize();
+        return 'test_token';//paymentServices.placeholderTokenize();
     }
 
     /*******************************************************************************************************
