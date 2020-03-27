@@ -23,6 +23,10 @@
                 <behavior>Required</behavior>
                 <field>npe03__Amount__c</field>
             </layoutItems>
+            <layoutItems>
+                <behavior>Edit</behavior>
+                <field>%%%NAMESPACE%%%PaymentMethod__c</field>
+            </layoutItems>
         </layoutColumns>
         <layoutColumns>
             <layoutItems>
@@ -30,8 +34,12 @@
                 <field>npe03__Date_Established__c</field>
             </layoutItems>
             <layoutItems>
-                <behavior>Required</behavior>
-                <field>%%%NAMESPACE%%%RecurringType__c</field>
+                <behavior>Readonly</behavior>
+                <field>npe03__Next_Payment_Date__c</field>
+            </layoutItems>            
+            <layoutItems>
+                <behavior>Readonly</behavior>
+                <field>npe03__Last_Payment_Date__c</field>
             </layoutItems>
             <layoutItems>
                 <behavior>Edit</behavior>
@@ -39,15 +47,11 @@
             </layoutItems>
             <layoutItems>
                 <behavior>Edit</behavior>
-                <field>npe03__Recurring_Donation_Campaign__c</field>
-            </layoutItems>
-            <layoutItems>
-                <behavior>Edit</behavior>
                 <field>%%%NAMESPACE%%%ClosedReason__c</field>
             </layoutItems>
             <layoutItems>
                 <behavior>Edit</behavior>
-                <field>npe03__Installments__c</field>
+                <field>npe03__Recurring_Donation_Campaign__c</field>
             </layoutItems>
         </layoutColumns>
         <style>TwoColumnsTopToBottom</style>
@@ -57,11 +61,11 @@
         <detailHeading>true</detailHeading>
         <editHeading>true</editHeading>
         <label>Schedule Details</label>
-        <layoutColumns>
+        <layoutColumns>    
             <layoutItems>
-                <behavior>Edit</behavior>
-                <field>%%%NAMESPACE%%%PaymentMethod__c</field>
-            </layoutItems>
+                <behavior>Required</behavior>
+                <field>%%%NAMESPACE%%%RecurringType__c</field>
+            </layoutItems>  
             <layoutItems>
                 <behavior>Required</behavior>
                 <field>npe03__Installment_Period__c</field>
@@ -69,7 +73,9 @@
             <layoutItems>
                 <behavior>Required</behavior>
                 <field>%%%NAMESPACE%%%InstallmentFrequency__c</field>
-            </layoutItems>
+            </layoutItems>            
+        </layoutColumns>
+        <layoutColumns>
             <layoutItems>
                 <behavior>Required</behavior>
                 <field>%%%NAMESPACE%%%StartDate__c</field>
@@ -78,16 +84,10 @@
                 <behavior>Edit</behavior>
                 <field>%%%NAMESPACE%%%Day_of_Month__c</field>
             </layoutItems>
-        </layoutColumns>
-        <layoutColumns>
             <layoutItems>
-                <behavior>Readonly</behavior>
-                <field>npe03__Next_Payment_Date__c</field>
-            </layoutItems>
-            <layoutItems>
-                <behavior>Readonly</behavior>
-                <field>npe03__Last_Payment_Date__c</field>
-            </layoutItems>
+                <behavior>Edit</behavior>
+                <field>npe03__Installments__c</field>
+            </layoutItems>            
         </layoutColumns>
         <style>TwoColumnsTopToBottom</style>
     </layoutSections>
